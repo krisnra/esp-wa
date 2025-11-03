@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    container_name: espwa_app
+    ports: ["3026:3026"]
+    env_file: [".env"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["sh","-lc","npx prisma generate && node dist/index.js"] 
+
+  postgres:
+    image: postgres:16
+    container_name: esp-wa-postgres-1
+    environment:
+      POSTGRES_USER: espwa
+      POSTGRES_PASSWORD: espwa
+      POSTGRES_DB: espwa
+    ports:
+      - "5437:5432"     
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U espwa -d espwa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  adminer:
+    image: adminer
+    container_name: espwa_adminer
+    ports:
+      - "8080:8080"    
+    depends_on:
+      - postgres
+
+volumes:
+  pg_data:
