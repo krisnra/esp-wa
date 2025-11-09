@@ -4,13 +4,13 @@ client/node_modules/
 dist/
 client/dist/
 npm-debug.log*
-pnpm-lock.yaml # (kalau tidak dipakai)
-yarn.lock      # (kalau tidak dipakai)
+pnpm-lock.yaml 
+yarn.lock      
 
 # env & secrets
 .env
 .env.*
-!.env.example        # hanya contoh, tanpa nilai rahasia
+!.env.example       
 
 # prisma/generated
 node_modules/.prisma/

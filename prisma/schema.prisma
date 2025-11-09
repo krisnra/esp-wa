@@ -15,11 +15,52 @@ model Log {
   message   String?
 }
 
+enum Role {
+  ADMIN
+  USER
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique @db.VarChar(120)
-  password  String   // bcrypt hash
+  password  String   
   name      String?
+  role      Role     @default(USER)   
   createdAt DateTime @default(now())
 }
 
+enum Topic {
+  ALARM
+  BRANKAS
+}
+
+model Contact {
+  id        Int       @id @default(autoincrement())
+  phone     String    @unique @db.VarChar(32)
+  name      String?   @db.VarChar(120)
+  allowed   Boolean   @default(true)         
+  createdAt DateTime  @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  subscribers WaSubscriber[]
+}
+
+model WaSubscriber {
+  id         Int      @id @default(autoincrement())
+  contactId  Int
+  topic      Topic
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  contact    Contact  @relation(fields: [contactId], references: [id])
+
+  @@unique([contactId, topic])
+}
+
+model WaProcessed {
+  id        String   @id                 
+  from      String   @db.VarChar(32)
+  body      String?
+  ts        Int                             
+  createdAt DateTime @default(now())
+}
