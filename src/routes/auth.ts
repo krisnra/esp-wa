@@ -6,7 +6,12 @@ import rateLimit from "express-rate-limit";
 
 const prisma = new PrismaClient();
 const r = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "changeme";
+
+const JWT_SECRET = process.env.JWT_SECRET || "";
+
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET env variable is not set");
+}
 
 const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,

@@ -1,19 +1,20 @@
 services:
   app:
     build: .
+    restart: unless-stopped
     container_name: espwa_app
-    ports: ["3026:3026"]
+    ports: ["3000:3000"]
     env_file: [".env"]
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
     command: ["sh","-lc","npx prisma generate && node dist/index.js"] 
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
   postgres:
     image: postgres:16
+    restart: unless-stopped
     container_name: esp-wa-postgres-1
     environment:
       POSTGRES_USER: espwa
@@ -31,6 +32,7 @@ services:
 
   adminer:
     image: adminer
+    restart: unless-stopped
     container_name: espwa_adminer
     ports:
       - "8080:8080"    
