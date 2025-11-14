@@ -1,7 +1,8 @@
 import { Router } from "express";
 import fetch from "node-fetch";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
 import { sendMessage } from "../utils/sendMessage";
+import { log } from "../utils/logger";
 
 interface Message {
   id: string;
@@ -18,22 +19,9 @@ interface WPPResponse {
 
 type TopicType = "ALARM" | "BRANKAS";
 
-const prisma = new PrismaClient();
 const router = Router();
 
 const STARTED_AT_MS = Date.now();
-
-async function writeLog(
-  category: string,
-  level: "INFO" | "WARN" | "ERROR",
-  message: string
-) {
-  try {
-    await prisma.log.create({ data: { category, level, message } });
-  } catch (e) {
-    console.error("[WPP.LOG] write failed:", e);
-  }
-}
 
 const normPhone = (jid: string) => jid?.replace("@c.us", "") ?? "";
 const isOn = (s: string) => /(on)\b/i.test(s);
@@ -54,9 +42,8 @@ async function setSubscription(
 ) {
   const contact = await ensureContact(phone);
   if (!contact.allowed) {
-    await writeLog(
+    await log.warn(
       "WPP:AUTH",
-      "WARN",
       `BLOCKED ${phone} tried ${topic}=${enable ? "ON" : "OFF"}`
     );
     await sendMessage(phone, "❌ Nomor ini belum diizinkan mengakses bot.");
@@ -67,11 +54,7 @@ async function setSubscription(
     create: { contactId: contact.id, topic, enabled: enable },
     update: { enabled: enable },
   });
-  await writeLog(
-    "WPP:SUB",
-    "INFO",
-    `${phone} ${topic} -> ${enable ? "ON" : "OFF"}`
-  );
+  await log.info("WPP:SUB", `${phone} ${topic} -> ${enable ? "ON" : "OFF"}`);
   return { ok: true as const };
 }
 
@@ -121,13 +104,9 @@ async function checkNewMessages() {
     });
 
     if (!response.ok) {
-      await writeLog(
+      await log.error(
         "WPP:HTTP",
-        "ERROR",
         `all-new-messages ${response.status} ${response.statusText}`
-      );
-      console.error(
-        `[WPP] fetch fail: ${response.status} ${response.statusText}`
       );
       return;
     }
@@ -159,34 +138,23 @@ async function checkNewMessages() {
         1000;
 
       if (msgTimeMs < STARTED_AT_MS - 2000) {
-        await writeLog(
-          "WPP:SKIP",
-          "INFO",
-          `ignored old msg ${phone}: ${content}`
-        );
+        await log.info("WPP:SKIP", `ignored old msg ${phone}: ${content}`);
         continue;
       }
 
-      console.log(`[WA] Pesan baru dari ${phone}: ${content}`);
-      await writeLog("WPP:RX", "INFO", `from ${phone}: ${content}`);
+      await log.info("WPP:RX", `from ${phone}: ${content}`);
 
       if (content.startsWith("/")) {
         try {
           await handleCommand(phone, content);
         } catch (e) {
-          await writeLog(
-            "WPP:ERR",
-            "ERROR",
-            `handleCommand ${phone}: ${String(e)}`
-          );
-          console.error("[WPP] handleCommand error:", e);
+          await log.error("WPP:CMD", `handleCommand ${phone}: ${String(e)}`);
         }
       }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await writeLog("WPP:ERR", "ERROR", `poll error: ${msg}`);
-    console.error("[WPP] Error:", msg);
+    await log.error("WPP:POLL", `poll error: ${msg}`);
   }
 }
 

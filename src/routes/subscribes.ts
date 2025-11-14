@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
+import { log } from "../utils/logger";
 
-const prisma = new PrismaClient();
 const r = Router();
 
 type OutRow = {
@@ -46,7 +46,7 @@ r.get("/", async (req: Request, res: Response) => {
 
     res.json({ ok: true, rows: out });
   } catch (e) {
-    console.error("[subscribes] list error:", e);
+    await log.error("APP:SUBSCRIBES", `List error: ${String(e)}`);
     res.status(500).json({ ok: false });
   }
 });

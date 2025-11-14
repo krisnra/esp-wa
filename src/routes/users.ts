@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import bcrypt from "bcryptjs";
+import { log } from "../utils/logger";
 
-const prisma = new PrismaClient();
 const r = Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -90,7 +90,7 @@ r.get("/", async (req, res) => {
     });
     res.json({ ok: true, rows });
   } catch (e) {
-    console.error("[users] list error:", e);
+    await log.error("APP:USERS", `List error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_list" });
   }
 });
@@ -130,7 +130,7 @@ r.post("/", async (req, res) => {
     if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
       return res.status(409).json({ ok: false, error: "email_unique" });
     }
-    console.error("[users] create error:", e);
+    await log.error("APP:USERS", `Create error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_create" });
   }
 });
@@ -204,7 +204,7 @@ r.put("/:id", async (req, res) => {
         return res.status(404).json({ ok: false, error: "not_found" });
       }
     }
-    console.error("[users] update error:", e);
+    await log.error("APP:USERS", `Update error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_update" });
   }
 });
@@ -239,7 +239,7 @@ r.delete("/:id", async (req, res) => {
     if (e instanceof PrismaClientKnownRequestError && e.code === "P2025") {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
-    console.error("[users] delete error:", e);
+    await log.error("APP:USERS", `Delete error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_delete" });
   }
 });

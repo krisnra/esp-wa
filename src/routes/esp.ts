@@ -1,10 +1,10 @@
 import { Router, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
 import { sendMessage } from "../utils/sendMessage";
 import { isMailerReady, sendToAlertList } from "../utils/mailer";
+import { log } from "../utils/logger";
 
-const prisma = new PrismaClient();
 const r = Router();
 
 type Topic = "ALARM" | "BRANKAS";
@@ -25,16 +25,6 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-async function writeLog(category: string, level: string, message: string) {
-  try {
-    await prisma.log.create({
-      data: { category, level, message },
-    });
-  } catch (e) {
-    console.error("[LOG] write failed:", e);
-  }
-}
-
 type SubWithPhone = { contact: { phone: string } };
 
 r.post("/", limiter, requireEspKey, async (req: Request, res: Response) => {
@@ -46,10 +36,17 @@ r.post("/", limiter, requireEspKey, async (req: Request, res: Response) => {
   const topic: Topic =
     String(device).toUpperCase() === "ALARM" ? "ALARM" : "BRANKAS";
   const category = `ESP:${topic}`;
-  const lvl = String(level).toUpperCase();
+  const lvlRaw = String(level).toUpperCase();
+  const lvl: "INFO" | "WARN" | "ERROR" =
+    lvlRaw === "WARN" || lvlRaw === "ERROR" ? lvlRaw : "INFO";
   const msg = String(message);
 
-  await writeLog(category, "INFO", `RX ${device}/${lvl}: ${msg}`);
+  const levelMap = {
+    INFO: log.info,
+    WARN: log.warn,
+    ERROR: log.error,
+  } as const;
+  levelMap[lvl](category, `RX ${device}/${lvl}: ${msg}`);
 
   if (topic === "BRANKAS") {
     try {
@@ -64,23 +61,21 @@ r.post("/", limiter, requireEspKey, async (req: Request, res: Response) => {
         const text = lines.join("\n");
 
         const { accepted, rejected } = await sendToAlertList(subject, text);
-        await writeLog(
+        await log.info(
           category,
-          "INFO",
           `EMAIL_NOTIFY done: accepted=${accepted.length}, rejected=${rejected.length}`
         );
         if (rejected.length) {
-          await writeLog(
+          await log.warn(
             category,
-            "WARN",
             `EMAIL_NOTIFY rejected -> ${rejected.join(", ")}`
           );
         }
       } else {
-        await writeLog(category, "INFO", "Email disabled/not configured.");
+        await log.info(category, "Email disabled/not configured.");
       }
     } catch (e: any) {
-      await writeLog(category, "ERROR", `EMAIL_NOTIFY failed: ${String(e)}`);
+      await log.error(category, `EMAIL_NOTIFY failed: ${String(e)}`);
     }
   }
 
@@ -90,7 +85,7 @@ r.post("/", limiter, requireEspKey, async (req: Request, res: Response) => {
   });
 
   if (subs.length === 0) {
-    await writeLog(category, "INFO", "No active subscribers, skipping notify.");
+    await log.info(category, "No active subscribers, skipping notify.");
     return res.json({ ok: true, notified: 0 });
   }
 
@@ -124,16 +119,15 @@ r.post("/", limiter, requireEspKey, async (req: Request, res: Response) => {
     });
   }
 
-  await writeLog(
+  await log.info(
     category,
-    "INFO",
     `Notify done: ok=${okCount}, fail=${subs.length - okCount}`
   );
   if (perSendLogs.length) {
     try {
       await prisma.log.createMany({ data: perSendLogs });
     } catch (e) {
-      console.error("[LOG] createMany failed:", e);
+      await log.error("APP:LOG", `CreateMany failed: ${String(e)}`);
     }
   }
 

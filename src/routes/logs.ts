@@ -1,15 +1,22 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
+import { log } from "../utils/logger";
 
-const prisma = new PrismaClient();
 const r = Router();
 
 r.get("/", async (req, res) => {
   try {
-    const limitRaw = Number(req.query.limit ?? 200);
-    const limit = Number.isFinite(limitRaw)
-      ? Math.min(Math.max(limitRaw, 1), 1000)
-      : 200;
+    const pageRaw = Number(req.query.page ?? 1);
+    const page =
+      Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+
+    const pageSizeRaw = Number(req.query.pageSize ?? req.query.limit ?? 50);
+    const pageSizeUnclamped =
+      Number.isFinite(pageSizeRaw) && pageSizeRaw > 0
+        ? Math.floor(pageSizeRaw)
+        : 50;
+
+    const pageSize = Math.min(Math.max(pageSizeUnclamped, 1), 1000);
 
     const q = String(req.query.q ?? "").trim();
     const level = String(req.query.level ?? "")
@@ -53,22 +60,34 @@ r.get("/", async (req, res) => {
       };
     }
 
-    const rows = await prisma.log.findMany({
-      where: where as any,
-      orderBy: [{ ts: "desc" }],
-      take: limit,
-      select: {
-        id: true,
-        ts: true,
-        category: true,
-        level: true,
-        message: true,
-      },
-    });
+    const skip = (page - 1) * pageSize;
 
-    res.json({ ok: true, rows });
+    const [rows, total] = await Promise.all([
+      prisma.log.findMany({
+        where: where as any,
+        orderBy: [{ ts: "desc" }],
+        take: pageSize,
+        skip,
+        select: {
+          id: true,
+          ts: true,
+          category: true,
+          level: true,
+          message: true,
+        },
+      }),
+      prisma.log.count({ where: where as any }),
+    ]);
+
+    res.json({
+      ok: true,
+      rows,
+      total,
+      page,
+      pageSize,
+    });
   } catch (e: unknown) {
-    console.error("[logs] list error:", e);
+    await log.error("APP:LOGS", `List error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_list" });
   }
 });
@@ -83,7 +102,7 @@ r.get("/categories", async (_req, res) => {
     });
     res.json({ ok: true, categories: rows.map((row) => row.category) });
   } catch (e) {
-    console.error("[logs] categories error:", e);
+    await log.error("APP:LOGS", `Categories error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_categories" });
   }
 });

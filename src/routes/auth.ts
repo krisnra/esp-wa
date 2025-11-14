@@ -1,10 +1,9 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
 import rateLimit from "express-rate-limit";
 
-const prisma = new PrismaClient();
 const r = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "";

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import { log } from "../utils/logger";
 
-const prisma = new PrismaClient();
 const r = Router();
 
 function toInt(v: any, def = 200, max = 1000) {
@@ -48,7 +48,7 @@ r.get("/", async (req, res) => {
 
     res.json({ ok: true, rows });
   } catch (e: unknown) {
-    console.error("[contacts] list error:", e);
+    await log.error("APP:CONTACTS", `List error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_list" });
   }
 });
@@ -80,7 +80,7 @@ r.post("/", async (req, res) => {
     if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
       return res.status(409).json({ ok: false, error: "phone_unique" });
     }
-    console.error("[contacts] create error:", e);
+    await log.error("APP:CONTACTS", `Create error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_create" });
   }
 });
@@ -97,7 +97,7 @@ r.delete("/:id", async (req, res) => {
     if (e instanceof PrismaClientKnownRequestError && e.code === "P2025") {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
-    console.error("[contacts] delete error:", e);
+    await log.error("APP:CONTACTS", `Delete error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_delete" });
   }
 });
@@ -148,7 +148,7 @@ r.put("/:id", async (req, res) => {
         return res.status(404).json({ ok: false, error: "not_found" });
       }
     }
-    console.error("[contacts] update error:", e);
+    await log.error("APP:CONTACTS", `Update error: ${String(e)}`);
     res.status(500).json({ ok: false, error: "failed_update" });
   }
 });

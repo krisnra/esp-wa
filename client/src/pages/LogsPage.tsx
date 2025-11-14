@@ -41,24 +41,47 @@ export default function LogsPage() {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // filter opsional
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState<string>("");
   const [level, setLevel] = useState<"" | "INFO" | "WARN" | "ERROR">("");
   const [q, setQ] = useState<string>("");
 
-  async function load() {
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [total, setTotal] = useState<number>(0);
+
+  async function load(pageArg?: number, pageSizeArg?: number) {
+    const targetPage = pageArg ?? page;
+    const targetPageSize = pageSizeArg ?? pageSize;
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set("limit", "200"); // tetap batasi 200 terbaru dari server
+      params.set("page", String(targetPage));
+      params.set("pageSize", String(targetPageSize));
+
       if (category) params.set("category", category);
       if (level) params.set("level", level);
       if (q.trim()) params.set("q", q.trim());
 
       const url = `/api/logs?${params.toString()}`;
-      const r = await jfetch<{ ok: boolean; rows: LogRow[] }>(url);
-      setLogs(r.ok ? r.rows : []);
+      const r = await jfetch<{
+        ok: boolean;
+        rows: LogRow[];
+        total?: number;
+        page?: number;
+        pageSize?: number;
+      }>(url);
+
+      if (r.ok) {
+        setLogs(r.rows ?? []);
+        setTotal(r.total ?? r.rows?.length ?? 0);
+        setPage(r.page ?? targetPage);
+        setPageSize(r.pageSize ?? targetPageSize);
+      } else {
+        setLogs([]);
+        setTotal(0);
+      }
     } finally {
       setLoading(false);
     }
@@ -70,24 +93,26 @@ export default function LogsPage() {
         "/api/logs/categories"
       );
       if (r.ok) setCategories(r.categories);
-    } catch {
-      // kalau endpoint categories belum ada, UI tetap jalan
-    }
+    } catch {}
   }
 
   useEffect(() => {
-    load();
+    load(1, 50);
     loadCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // auto-reload saat kategori/level berubah
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    load(1);
   }, [category, level]);
 
-  const total = useMemo(() => logs.length, [logs]);
+  const pageCount = useMemo(
+    () => (total === 0 ? 1 : Math.ceil(total / pageSize)),
+    [total, pageSize]
+  );
+
+  const currentPage = Math.min(page, pageCount);
+  const startIndex = total === 0 ? 0 : (currentPage - 1) * pageSize;
+  const endIndex = total === 0 ? 0 : Math.min(startIndex + logs.length, total);
 
   return (
     <section className="space-y-3">
@@ -101,7 +126,7 @@ export default function LogsPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") load();
+              if (e.key === "Enter") load(1);
             }}
           />
 
@@ -132,7 +157,7 @@ export default function LogsPage() {
           </select>
 
           <Button
-            onClick={load}
+            onClick={() => load(1)}
             className="inline-flex items-center gap-2 border border-slate-700 bg-slate-800 hover:bg-slate-700"
             disabled={loading}
             title="Terapkan filter"
@@ -146,7 +171,7 @@ export default function LogsPage() {
               setQ("");
               setCategory("");
               setLevel("");
-              setTimeout(() => load(), 0);
+              setTimeout(() => load(1), 0);
             }}
             className="inline-flex items-center gap-2 border border-slate-700 bg-slate-800 hover:bg-slate-700"
           >
@@ -156,7 +181,7 @@ export default function LogsPage() {
       </div>
 
       <div className="text-sm text-slate-400">
-        Menampilkan {total} log terakhir
+        Total {total} log
         {category ? ` di kategori "${category}"` : ""}
         {level ? ` (level ${level})` : ""}.
       </div>
@@ -165,7 +190,6 @@ export default function LogsPage() {
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-slate-800/60 text-slate-300">
             <tr>
-              <Th w="90px">ID</Th>
               <Th w="180px">Timestamp</Th>
               <Th w="160px">Category</Th>
               <Th w="100px">Level</Th>
@@ -185,7 +209,6 @@ export default function LogsPage() {
                   key={row.id}
                   className="border-t border-slate-800 hover:bg-slate-800/50"
                 >
-                  <Td mono>{row.id}</Td>
                   <Td>{new Date(row.ts as any).toLocaleString()}</Td>
                   <Td>{row.category}</Td>
                   <Td>
@@ -207,6 +230,95 @@ export default function LogsPage() {
             )}
           </tbody>
         </table>
+
+        {/* bottom pagination bar */}
+        <div className="flex flex-col gap-2 border-t border-slate-800 bg-slate-900/80 px-4 py-2 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            Showing {total === 0 ? 0 : startIndex + 1} to {endIndex} of {total}{" "}
+            results
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span>Rows per page</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  const newSize = Number(e.target.value);
+                  setPageSize(newSize);
+                  setPage(1);
+                  load(1, newSize);
+                }}
+                className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs"
+              >
+                {[10, 25, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs disabled:opacity-40"
+                onClick={() => {
+                  if (currentPage > 1) {
+                    setPage(1);
+                    load(1);
+                  }
+                }}
+                disabled={currentPage === 1 || total === 0}
+              >
+                {"<<"}
+              </button>
+              <button
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs disabled:opacity-40"
+                onClick={() => {
+                  if (currentPage > 1) {
+                    const newPage = currentPage - 1;
+                    setPage(newPage);
+                    load(newPage);
+                  }
+                }}
+                disabled={currentPage === 1 || total === 0}
+              >
+                {"<"}
+              </button>
+
+              <span className="px-2">
+                Page {total === 0 ? 0 : currentPage} of{" "}
+                {total === 0 ? 0 : pageCount}
+              </span>
+
+              <button
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs disabled:opacity-40"
+                onClick={() => {
+                  if (currentPage < pageCount) {
+                    const newPage = currentPage + 1;
+                    setPage(newPage);
+                    load(newPage);
+                  }
+                }}
+                disabled={currentPage === pageCount || total === 0}
+              >
+                {">"}
+              </button>
+              <button
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs disabled:opacity-40"
+                onClick={() => {
+                  if (currentPage < pageCount) {
+                    setPage(pageCount);
+                    load(pageCount);
+                  }
+                }}
+                disabled={currentPage === pageCount || total === 0}
+              >
+                {">>"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );

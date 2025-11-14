@@ -15,6 +15,7 @@ import logsRoutes from "./routes/logs";
 
 import { requireAuth } from "./middlewares/requireAuth";
 import { requireAdmin } from "./middlewares/requireAdmin";
+import { log } from "./utils/logger";
 
 const app = express();
 
@@ -56,5 +57,7 @@ if (fs.existsSync(distPath)) {
   );
 }
 
-const port = Number(process.env.PORT ?? 3000);
-app.listen(port, () => console.log(`Server ready on :${port}`));
+const port = Number(process.env.PORT);
+app.listen(port, () => {
+  log.info("APP", `Server ready on :${port}`);
+});
